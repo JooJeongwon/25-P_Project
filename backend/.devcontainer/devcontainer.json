@@ -1,0 +1,47 @@
+{
+    "name": "Backend (Java 21 & Spring Boot)",
+    "image": "mcr.microsoft.com/devcontainers/java:1-21-bookworm",
+    "features": {
+        // 1. Gradle 설치 (Java 기능 안에 포함)
+        "ghcr.io/devcontainers/features/java:1": {
+            "version": "none",
+            "installGradle": true,
+            "installMaven": false
+        },
+        // 2. 도커 명령어 사용 (Docker-in-Docker)
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    },
+    "customizations": {
+        "vscode": {
+            "settings": {
+                // 자바 컴파일 설정
+                "java.compile.nullAnalysis.mode": "automatic",
+                // 롬복 처리 활성화
+                "java.jdt.ls.vmargs": "-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx1G -Xms100m -javaagent:\"/home/vscode/.vscode-server/extensions/gabrielbb.vscode-lombok-1.18.36/server/lombok.jar\""
+            },
+            "extensions": [
+                "vscjava.vscode-java-pack", // 자바 필수 팩
+                "vmware.vscode-spring-boot", // 스프링 부트 도구
+                "gabrielbb.vscode-lombok", // 롬복
+                "ms-azuretools.vscode-docker", // 도커 관리
+                "cweijan.vscode-database-client2", // ⭐ DB 접속 툴 (MySQL 확인용)
+                "eamodio.gitlens" // ⭐ 깃 히스토리 보기 (협업 필수)
+            ]
+        }
+    },
+    // 3. ⭐ 핵심: Gradle 라이브러리 캐시 저장 (재부팅해도 다운로드 안 하게)
+    "mounts": [
+        "source=gradle-cache,target=/home/vscode/.gradle,type=volume"
+    ],
+    "runArgs": [
+        "--network=p_project_hyodream"
+    ],
+    // 4. 한국 시간 설정
+    "containerEnv": {
+        "TZ": "Asia/Seoul"
+    },
+    "forwardPorts": [
+        8080
+    ],
+    "remoteUser": "vscode"
+}
