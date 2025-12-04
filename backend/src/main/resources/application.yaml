@@ -23,7 +23,7 @@ spring:
 
   data:
     redis:
-      host: 172.19.0.2  # 도커 밖(Host)을 통해서 연결
+      host: hyodream-redis # 도커 밖(Host)을 통해서 연결
       # 나중에 배포할 땐 'redis-cache'로 바꿔야 함
       port: 6379
 

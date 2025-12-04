@@ -1,5 +1,7 @@
 package com.hyodream.backend.order.service;
 
+import com.hyodream.backend.payment.service.PaymentService;
+
 import com.hyodream.backend.order.domain.Order;
 import com.hyodream.backend.order.domain.OrderItem;
 import com.hyodream.backend.order.domain.OrderStatus;
@@ -9,8 +11,10 @@ import com.hyodream.backend.order.dto.OrderResponseDto;
 import com.hyodream.backend.order.repository.OrderRepository;
 import com.hyodream.backend.product.domain.Product;
 import com.hyodream.backend.product.repository.ProductRepository;
+
 import com.hyodream.backend.user.domain.User;
 import com.hyodream.backend.user.repository.UserRepository;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +29,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final ProductRepository productRepository;
+    private final PaymentService paymentService;
 
     // 주문 생성
     @Transactional
@@ -33,19 +38,25 @@ public class OrderService {
                 .orElseThrow(() -> new RuntimeException("사용자 없음"));
 
         List<OrderItem> orderItems = new ArrayList<>();
+        int totalAmount = 0; // 총 결제 금액 계산용 변수
 
         for (OrderRequestDto dto : itemDtos) {
             Product product = productRepository.findById(dto.getProductId())
                     .orElseThrow(() -> new RuntimeException("상품 없음"));
 
-            // 주문 상품 생성
             OrderItem orderItem = OrderItem.createOrderItem(product.getId(), product.getPrice(), dto.getCount());
             orderItems.add(orderItem);
+
+            // 금액 누적 (가격 * 수량)
+            totalAmount += (product.getPrice() * dto.getCount());
         }
 
-        // 주문서 생성
+        // 주문서 생성 및 저장
         Order order = Order.createOrder(user.getId(), orderItems);
         orderRepository.save(order);
+
+        // PaymentService에게 결제 처리 위임
+        paymentService.processPayment(order.getId(), totalAmount, "CARD");
 
         return order.getId();
     }

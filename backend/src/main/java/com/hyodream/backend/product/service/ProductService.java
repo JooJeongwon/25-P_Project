@@ -13,6 +13,10 @@ import com.hyodream.backend.user.dto.HealthInfoRequestDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -49,10 +53,13 @@ public class ProductService {
 
     // 전체 상품 목록 조회 (사용자용)
     @Transactional(readOnly = true)
-    public List<ProductResponseDto> getAllProducts() {
-        return productRepository.findAll().stream()
-                .map(ProductResponseDto::new)
-                .collect(Collectors.toList());
+    public Page<ProductResponseDto> getAllProducts(int page, int size) {
+        // 페이지 만들기: page번 페이지, size개씩, id 내림차순(최신순) 정렬
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+
+        // findAll(pageable)을 호출하면 알아서 Page 객체를 줍니다.
+        return productRepository.findAll(pageable)
+                .map(ProductResponseDto::new); // 엔티티 -> DTO 변환도 map으로 한 방에!
     }
 
     // 상품 상세 조회 (ID로 찾기)
@@ -94,14 +101,16 @@ public class ProductService {
                 .collect(Collectors.toList());
     }
 
-    // 상품 검색 기능 (이름으로 찾기)
+    // 상품 검색 기능 (이름으로)
     @Transactional(readOnly = true)
-    public List<ProductResponseDto> searchProducts(String keyword) {
-        // Repository에 메서드 추가 필요
-        List<Product> products = productRepository.findByNameContaining(keyword);
+    public Page<ProductResponseDto> searchProducts(String keyword, int page, int size) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return Page.empty(); // 빈 리스트 대신 빈 페이지 반환
+        }
 
-        return products.stream()
-                .map(ProductResponseDto::new)
-                .collect(Collectors.toList());
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+
+        return productRepository.findByNameContaining(keyword, pageable)
+                .map(ProductResponseDto::new);
     }
 }

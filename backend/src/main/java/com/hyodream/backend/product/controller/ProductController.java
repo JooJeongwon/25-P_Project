@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
+import org.springframework.data.domain.Page;
 
 import java.util.List;
 
@@ -25,9 +26,13 @@ public class ProductController {
     }
 
     // 전체 목록 조회
+    // 사용법: GET /api/products?page=0&size=10
     @GetMapping
-    public ResponseEntity<List<ProductResponseDto>> getAllProducts() {
-        return ResponseEntity.ok(productService.getAllProducts());
+    public ResponseEntity<Page<ProductResponseDto>> getAllProducts(
+            @RequestParam(defaultValue = "0") int page, // 안 보내면 0페이지(처음)
+            @RequestParam(defaultValue = "10") int size // 안 보내면 10개씩
+    ) {
+        return ResponseEntity.ok(productService.getAllProducts(page, size));
     }
 
     // 상세 조회
@@ -48,10 +53,12 @@ public class ProductController {
         return ResponseEntity.ok(recommendations);
     }
 
-    // 상품 검색 API
-    // GET http://localhost:8080/api/products/search?keyword=관절
+    // 사용법: GET /api/products/search?keyword=관절&page=0&size=10
     @GetMapping("/search")
-    public ResponseEntity<List<ProductResponseDto>> searchProducts(@RequestParam("keyword") String keyword) {
-        return ResponseEntity.ok(productService.searchProducts(keyword));
+    public ResponseEntity<Page<ProductResponseDto>> searchProducts(
+            @RequestParam("keyword") String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(productService.searchProducts(keyword, page, size));
     }
 }
