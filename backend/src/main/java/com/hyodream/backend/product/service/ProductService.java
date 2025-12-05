@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -62,42 +63,76 @@ public class ProductService {
         productRepository.save(product);
     }
 
-    // 전체 상품 목록 조회 (실시간 관심사 반영 정렬)
+    // 전체 상품 목록 조회 (알레르기 필터링 + 인기순 + 실시간 주입)
     @Transactional(readOnly = true)
-    public Page<ProductResponseDto> getAllProducts(int page, int size, String identifier) {
-        Pageable pageable = PageRequest.of(page, size); // 정렬 조건은 쿼리에서 직접 하므로 여기선 뺌
+    public Page<ProductResponseDto> getAllProducts(int page, int size, String sort, String identifier) {
 
-        // A. 변수 초기화
+        // A. 정렬 기준 결정 (기본값: 인기순)
+        Sort sortCondition = Sort.by("recentSales").descending().and(Sort.by("id").descending());
+
+        if ("latest".equals(sort)) {
+            sortCondition = Sort.by("id").descending(); // 최신순 요청 시 변경
+        }
+
+        // B. 유저 알레르기 정보 가져오기
         boolean isLogin = false;
-        List<String> userAllergies = new ArrayList<>(); // 알레르기 목록
-        String interestCategory = ""; // 관심사 (없으면 빈 문자열)
+        List<String> userAllergies = new ArrayList<>();
 
-        // B. 유저 정보 및 관심사 추출
-        if (identifier != null && !identifier.equals("unknown")) {
-            // 1. 로그인 유저 확인 (identifier가 username인 경우)
-            // (컨트롤러에서 명확히 구분해서 넘겨주면 좋지만, 일단 DB 조회 시도)
+        if (identifier != null && !identifier.equals("unknown") && !identifier.startsWith("session:")) {
+            // 로그인 유저(username)인 경우 DB 조회
             userRepository.findByUsername(identifier).ifPresent(user -> {
-                // 알레르기 목록 채우기
                 user.getAllergies().forEach(ua -> userAllergies.add(ua.getAllergy().getName()));
             });
             if (!userAllergies.isEmpty())
                 isLogin = true;
-
-            // 2. Redis 실시간 관심사 확인
-            String redisKey = "interest:user:" + identifier;
-            Set<String> topInterests = redisTemplate.opsForZSet().reverseRange(redisKey, 0, 0);
-            if (topInterests != null && !topInterests.isEmpty()) {
-                interestCategory = topInterests.iterator().next();
-            }
         }
-
-        // C. 쿼리 실행 (DB가 알아서 정렬하고 필터링해서 Page로 줌)
-        // (알레르기가 없으면 빈 리스트를 넘겨야 에러 안 남)
+        // 쿼리 에러 방지용 더미 데이터
         if (userAllergies.isEmpty())
             userAllergies.add("NONE");
 
-        return productRepository.findAllWithPersonalization(isLogin, userAllergies, interestCategory, pageable)
-                .map(ProductResponseDto::new);
+        // C. 기본 목록 조회 (알레르기 필터링 + 정렬 적용)
+        Pageable pageable = PageRequest.of(page, size, sortCondition);
+        Page<Product> productPage = productRepository.findAllWithPersonalization(isLogin, userAllergies, pageable);
+
+        List<Product> originalList = productPage.getContent();
+        List<Product> resultList = new ArrayList<>(originalList);
+
+        // D. [첫 페이지]일 때만 실시간 관심사 5개 '강제 주입'
+        if (page == 0 && identifier != null && !identifier.equals("unknown")) {
+            String redisKey = "interest:user:" + identifier;
+            Set<String> topInterests = redisTemplate.opsForZSet().reverseRange(redisKey, 0, 0);
+
+            if (topInterests != null && !topInterests.isEmpty()) {
+                String interestCategory = topInterests.iterator().next();
+
+                // 관심 상품 5개 가져오기
+                List<Product> interestProducts = productRepository
+                        .findTop5ByHealthBenefitsContainingOrderByIdDesc(interestCategory);
+
+                // 맨 앞에 삽입
+                for (int i = interestProducts.size() - 1; i >= 0; i--) {
+                    resultList.add(0, interestProducts.get(i));
+                }
+            }
+        }
+
+        // E. 중복 제거 및 DTO 변환
+        List<Long> addedIds = new ArrayList<>();
+        List<ProductResponseDto> finalDtos = new ArrayList<>();
+
+        for (Product p : resultList) {
+            // 알레르기 필터링은 위 쿼리에서 이미 했지만, 주입된 상품(interestProducts)도 알레르기 체크가 필요할 수 있음
+            // 하지만 주입된 상품은 "사용자가 직접 클릭해서 점수를 올린" 상품이므로, 알레르기가 있어도 보여주는 게 맞음 (의도적 접근)
+            // 따라서 여기선 중복만 제거
+            if (!addedIds.contains(p.getId())) {
+                finalDtos.add(new ProductResponseDto(p));
+                addedIds.add(p.getId());
+            }
+            if (finalDtos.size() >= size)
+                break;
+        }
+
+        return new PageImpl<>(finalDtos, pageable, productPage.getTotalElements());
     }
 
     // 상품 상세 조회 (ID로 찾기)
@@ -110,44 +145,48 @@ public class ProductService {
 
     // AI + 실시간 하이브리드 추천 (로그인 유저 전용)
     @Transactional(readOnly = true)
-    public List<ProductResponseDto> getRecommendedProducts(String username) {
+    public List<ProductResponseDto> getRecommendedProducts(String identifier, boolean isLogin) {
         List<Product> finalProducts = new ArrayList<>();
 
-        // [A] 실시간 행동 기반 추천 (Short-term Interest)
-        // 로그인 유저니까 식별자로 username을 사용
-        String redisKey = "interest:user:" + username;
+        // [A] 실시간 행동 기반 추천 (공통)
+        // 로그인 여부와 상관없이 식별자(identifier)로 Redis 조회
+        String redisKey = "interest:user:" + identifier;
         Set<String> topInterests = redisTemplate.opsForZSet().reverseRange(redisKey, 0, 0);
 
         if (topInterests != null && !topInterests.isEmpty()) {
             String hotCategory = topInterests.iterator().next();
-            // 해당 태그 상품 3개 가져오기
+            // 해당 태그 상품 3개 가져오기 (메서드 재활용)
             List<Product> realTimePicks = productRepository.findByHealthBenefitsContaining(hotCategory);
+
+            // 최대 3개만
             if (realTimePicks.size() > 3)
                 realTimePicks = realTimePicks.subList(0, 3);
             finalProducts.addAll(realTimePicks);
         }
 
-        // 2. [AI] 기존 AI 추천 로직
-        try {
-            User user = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new RuntimeException("사용자 없음"));
+        // [B] AI 기반 추천 (로그인 유저만!)
+        if (isLogin) {
+            try {
+                User user = userRepository.findByUsername(identifier)
+                        .orElseThrow(() -> new RuntimeException("사용자 없음"));
 
-            HealthInfoRequestDto requestDto = new HealthInfoRequestDto();
-            requestDto.setDiseaseNames(user.getDiseases().stream().map(ud -> ud.getDisease().getName()).toList());
-            requestDto.setAllergyNames(user.getAllergies().stream().map(ua -> ua.getAllergy().getName()).toList());
-            requestDto.setHealthGoalNames(
-                    user.getHealthGoals().stream().map(uh -> uh.getHealthGoal().getName()).toList());
+                HealthInfoRequestDto requestDto = new HealthInfoRequestDto();
+                requestDto.setDiseaseNames(user.getDiseases().stream().map(d -> d.getDisease().getName()).toList());
+                requestDto.setAllergyNames(user.getAllergies().stream().map(a -> a.getAllergy().getName()).toList());
+                requestDto.setHealthGoalNames(
+                        user.getHealthGoals().stream().map(h -> h.getHealthGoal().getName()).toList());
 
-            List<Long> aiProductIds = aiClient.getRecommendations(requestDto);
-            List<Product> aiProducts = productRepository.findAllById(aiProductIds);
+                List<Long> aiProductIds = aiClient.getRecommendations(requestDto);
+                List<Product> aiProducts = productRepository.findAllById(aiProductIds);
 
-            finalProducts.addAll(aiProducts); // AI 결과 뒤에 붙이기
-        } catch (Exception e) {
-            // Fallback: AI 서버가 죽어도 여기서 멈추지 않고, 위에서 담은 [실시간 추천]만이라도 리턴함
-            System.out.println("AI 서버 연결 실패 (Fallback 작동): " + e.getMessage());
+                finalProducts.addAll(aiProducts);
+
+            } catch (Exception e) {
+                System.err.println("⚠️ AI 서버 연동 실패 (Fallback 가동): " + e.getMessage());
+            }
         }
 
-        // 3. 중복 제거 (혹시 AI랑 실시간이랑 겹칠 수 있으니)
+        // [C] 중복 제거 및 반환
         return finalProducts.stream()
                 .distinct()
                 .map(ProductResponseDto::new)
@@ -165,5 +204,53 @@ public class ProductService {
 
         return productRepository.findByNameContaining(keyword, pageable)
                 .map(ProductResponseDto::new);
+    }
+
+    // 연관 상품 추천 (함께 많이 산 상품 + 고도화된 Fallback)
+    @Transactional(readOnly = true)
+    public List<ProductResponseDto> getRelatedProducts(Long productId) {
+        // 상품 존재 확인
+        if (!productRepository.existsById(productId)) {
+            return new ArrayList<>();
+        }
+
+        // [우선순위] 함께 많이 산 상품 (협업 필터링)
+        List<Product> relatedProducts = productRepository.findFrequentlyBoughtTogether(productId);
+
+        // [Fallback] 데이터 부족 시 -> "태그 유사도" 높은 순 추천 (콘텐츠 기반 필터링)
+        if (relatedProducts.isEmpty()) {
+            relatedProducts = productRepository.findSimilarProductsByBenefits(productId);
+        }
+        // 결과 반환 (DTO 변환)
+        return relatedProducts.stream()
+                .map(ProductResponseDto::new)
+                .collect(Collectors.toList());
+    }
+
+    // 판매량 증가 (주문 시 호출됨)
+    @Transactional
+    public void increaseTotalSales(Long productId, int count) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("상품 없음"));
+
+        // 누적 판매량 증가
+        product.setTotalSales(product.getTotalSales() + count);
+
+        // (선택) 재고 관리(Stock) 기능도 나중에 여기에 넣으면 됨
+        // product.decreaseStock(count);
+    }
+
+    // 8. 판매량 감소 (주문 취소 시 호출)
+    @Transactional
+    public void decreaseTotalSales(Long productId, int count) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("상품 없음"));
+
+        // 0보다 작아지면 안 되므로 방어 로직 추가
+        if (product.getTotalSales() >= count) {
+            product.setTotalSales(product.getTotalSales() - count);
+        } else {
+            product.setTotalSales(0);
+        }
     }
 }

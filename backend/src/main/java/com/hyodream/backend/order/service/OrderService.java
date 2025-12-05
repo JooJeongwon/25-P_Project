@@ -11,7 +11,7 @@ import com.hyodream.backend.order.dto.OrderResponseDto;
 import com.hyodream.backend.order.repository.OrderRepository;
 import com.hyodream.backend.product.domain.Product;
 import com.hyodream.backend.product.repository.ProductRepository;
-
+import com.hyodream.backend.product.service.ProductService;
 import com.hyodream.backend.user.domain.User;
 import com.hyodream.backend.user.repository.UserRepository;
 
@@ -30,6 +30,7 @@ public class OrderService {
     private final UserRepository userRepository;
     private final ProductRepository productRepository;
     private final PaymentService paymentService;
+    private final ProductService productService;
 
     // 주문 생성
     @Transactional
@@ -46,6 +47,9 @@ public class OrderService {
 
             OrderItem orderItem = OrderItem.createOrderItem(product.getId(), product.getPrice(), dto.getCount());
             orderItems.add(orderItem);
+
+            // 판매량 증가 호출
+            productService.increaseTotalSales(product.getId(), dto.getCount());
 
             // 금액 누적 (가격 * 수량)
             totalAmount += (product.getPrice() * dto.getCount());
@@ -109,5 +113,10 @@ public class OrderService {
 
         // 상태 변경 -> CANCEL
         order.setStatus(OrderStatus.CANCEL);
+
+        // 주문했던 상품들의 판매량 원상복구 (감소)
+        for (OrderItem item : order.getOrderItems()) {
+            productService.decreaseTotalSales(item.getProductId(), item.getCount());
+        }
     }
 }

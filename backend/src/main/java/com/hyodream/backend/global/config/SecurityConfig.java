@@ -33,6 +33,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/api/products/**",
+                                "/api/events/**", // 이벤트 수집
                                 "/error",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",

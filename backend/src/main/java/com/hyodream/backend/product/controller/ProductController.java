@@ -32,6 +32,7 @@ public class ProductController {
     public ResponseEntity<Page<ProductResponseDto>> getAllProducts(
             @RequestParam(defaultValue = "0") int page, // 안 보내면 0페이지(처음)
             @RequestParam(defaultValue = "10") int size, // 안 보내면 10개씩
+            @RequestParam(defaultValue = "latest") String sort, // 정렬 기준 추가 (기본값: 인기순)
             @RequestHeader(value = "X-Session-Id", required = false) String sessionId,
             Authentication auth // 로그인 여부 확인용
     ) {
@@ -40,7 +41,7 @@ public class ProductController {
         if (identifier == null)
             identifier = "unknown";
 
-        return ResponseEntity.ok(productService.getAllProducts(page, size, identifier));
+        return ResponseEntity.ok(productService.getAllProducts(page, size, sort, identifier));
     }
 
     // 상세 조회
@@ -49,14 +50,30 @@ public class ProductController {
         return ResponseEntity.ok(productService.getProduct(id));
     }
 
-    // AI 맞춤 추천 상품 조회
+    // 추천 상품 조회
     // GET http://localhost:8080/api/products/recommend
-    // 헤더: Authorization: Bearer {토큰}
-    // 4. AI 추천 (로그인 필수)
+    // 헤더: Authorization bearer (로그인 시), X-Session-Id (비로그인 시)
+    // AI 추천 (로그인 필수)
     @GetMapping("/recommend")
-    public ResponseEntity<List<ProductResponseDto>> getRecommendedProducts(Authentication authentication) {
-        // 로그인 유저는 username을 식별자로 사용
-        return ResponseEntity.ok(productService.getRecommendedProducts(authentication.getName()));
+    public ResponseEntity<List<ProductResponseDto>> getRecommendedProducts(
+            @RequestHeader(value = "X-Session-Id", required = false) String sessionId,
+            Authentication auth) {
+        String identifier;
+        boolean isLogin = false;
+
+        // 식별자 결정 (로그인 우선 -> 없으면 세션ID)
+        if (auth != null && auth.isAuthenticated()) {
+            identifier = auth.getName();
+            isLogin = true;
+        } else if (sessionId != null) {
+            identifier = sessionId;
+            isLogin = false;
+        } else {
+            // 둘 다 없으면 추천해줄 근거가 없음 -> 빈 리스트 반환
+            return ResponseEntity.ok(List.of());
+        }
+
+        return ResponseEntity.ok(productService.getRecommendedProducts(identifier, isLogin));
     }
 
     // 사용법: GET /api/products/search?keyword=관절&page=0&size=10
@@ -66,5 +83,12 @@ public class ProductController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok(productService.searchProducts(keyword, page, size));
+    }
+
+    // 연관 상품 추천 API
+    // GET http://localhost:8080/api/products/{id}/related
+    @GetMapping("/{id}/related")
+    public ResponseEntity<List<ProductResponseDto>> getRelatedProducts(@PathVariable Long id) {
+        return ResponseEntity.ok(productService.getRelatedProducts(id));
     }
 }

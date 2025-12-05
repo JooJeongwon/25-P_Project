@@ -31,6 +31,12 @@ public class Product {
     private String volume; // 용량 (예: 120정)
     private String sizeInfo; // 알약 크기
 
+    // 전체 누적 판매량
+    private int totalSales = 0;
+
+    // 최근 한 달 판매량 (인기순 정렬용)
+    private int recentSales = 0;
+
     // 이 상품의 효능 (AI 추천용 태그)
     // "관절", "당뇨" 같은 단순 문자열 리스트이므로 ElementCollection 사용
     // 별도 테이블(product_benefits)로 저장되지만, Product랑 한 몸 취급 (LifeCycle 같음)
@@ -39,7 +45,7 @@ public class Product {
     @Column(name = "benefit")
     private List<String> healthBenefits = new ArrayList<>();
 
-    // 👇👇 [추가] 알레르기 성분 (예: "땅콩", "우유")
+    // 알레르기 성분 (예: "땅콩", "우유")
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "product_allergens", joinColumns = @JoinColumn(name = "product_id"))
     @Column(name = "allergen")

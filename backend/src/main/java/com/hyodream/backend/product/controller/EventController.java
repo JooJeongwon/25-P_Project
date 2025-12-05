@@ -1,6 +1,7 @@
 package com.hyodream.backend.product.controller;
 
 import com.hyodream.backend.global.util.JwtUtil;
+import com.hyodream.backend.product.domain.EventType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -23,12 +24,13 @@ public class EventController {
     public void logProductView(
             @RequestParam Long productId,
             @RequestParam String category, // 예: "관절염", "당뇨" (상품의 핵심 태그)
+            @RequestParam(defaultValue = "CLICK") EventType type, // 기본값 CLICK
             @RequestHeader(value = "X-Session-Id", required = false) String sessionId, // 비로그인용 식별자
             @RequestHeader(value = "Authorization", required = false) String token // 로그인용
     ) {
         String userId = sessionId; // 기본값은 세션ID
 
-        // 👇👇 [수정] 토큰이 있으면 진짜 username을 꺼낸다!
+        // 토큰이 있으면 진짜 username을 꺼냄
         if (token != null && token.startsWith("Bearer ")) {
             String jwt = token.substring(7);
             if (jwtUtil.validateToken(jwt)) {
@@ -44,11 +46,11 @@ public class EventController {
         fields.put("userId", userId);
         fields.put("productId", productId.toString());
         fields.put("category", category);
+        fields.put("type", type.name()); // 이벤트 타입 저장 (CLICK, CART 등)
         fields.put("timestamp", String.valueOf(System.currentTimeMillis()));
 
-        RecordId id = redisTemplate.opsForStream()
-                .add("product-view-stream", fields);
+        redisTemplate.opsForStream().add("product-view-stream", fields);
 
-        System.out.println("Event Published for User: " + userId);
+        System.out.println("Event [" + type + "] Published for: " + userId);
     }
 }

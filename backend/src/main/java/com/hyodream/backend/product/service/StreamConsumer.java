@@ -1,5 +1,6 @@
 package com.hyodream.backend.product.service;
 
+import com.hyodream.backend.product.domain.EventType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -21,16 +22,31 @@ public class StreamConsumer implements StreamListener<String, MapRecord<String, 
         Map<String, String> event = message.getValue();
         String userId = event.get("userId");
         String category = event.get("category"); // 예: "관절염"
+        String typeStr = event.get("type"); // "CLICK", "CART" ...
 
-        System.out.println("Event Consumed: User " + userId + " clicked " + category);
+        // 카테고리가 없거나 비어있으면 -> 점수 집계 안 하고 종료 (방어 로직)
+        if (category == null || category.trim().isEmpty() || "null".equals(category)) {
+            System.out.println("Event Ignored: No Category (UserId: " + userId + ")");
+            return;
+        }
 
-        // 실시간 분석 로직: 유저별 카테고리 점수 누적 (ZSET 사용)
-        // Key: "interest:user:세션ID"
-        // Value: 카테고리명, Score: 클릭 횟수
+        // 점수 계산 로직
+        double score = 1.0; // 기본값
+        try {
+            // Enum에서 점수 꺼내오기
+            EventType type = EventType.valueOf(typeStr);
+            score = type.getScore();
+        } catch (Exception e) {
+            System.err.println("알 수 없는 이벤트 타입: " + typeStr);
+        }
+
+        System.out.println("Event Consumed: " + userId + " / " + category + " / +" + score + "점");
+
+        // Redis ZSet에 점수 누적
         String key = "interest:user:" + userId;
-        redisTemplate.opsForZSet().incrementScore(key, category, 1.0);
+        redisTemplate.opsForZSet().incrementScore(key, category, score);
 
-        // 데이터는 1시간 뒤 자동 만료 (단기 관심사니까)
-        redisTemplate.expire(key, Duration.ofHours(1));
+        // TTL 설정: 36시간 (어르신 맞춤형)
+        redisTemplate.expire(key, Duration.ofHours(36));
     }
 }
