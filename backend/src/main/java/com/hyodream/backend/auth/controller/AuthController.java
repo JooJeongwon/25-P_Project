@@ -40,4 +40,19 @@ public class AuthController {
 
         return ResponseEntity.ok(response);
     }
+
+    // 로그아웃 API
+    // POST http://localhost:8080/api/auth/logout
+    // Header: Authorization: Bearer {토큰}
+    @PostMapping("/logout")
+    public ResponseEntity<String> logout(@RequestHeader("Authorization") String authHeader) {
+        // "Bearer " 제거하고 순수 토큰만 추출
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String accessToken = authHeader.substring(7);
+            authService.logout(accessToken);
+            return ResponseEntity.ok("로그아웃 되었습니다.");
+        } else {
+            throw new RuntimeException("토큰이 없습니다.");
+        }
+    }
 }

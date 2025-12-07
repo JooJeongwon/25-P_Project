@@ -76,4 +76,20 @@ public class AuthService {
 
         return accessToken; // 일단 Access Token만 반환 (나중엔 DTO로 반환 추천)
     }
+
+    // 로그아웃 (Access Token을 블랙리스트에 추가)
+    public void logout(String accessToken) {
+        // 토큰 유효시간 계산 (남은 시간만큼만 블랙리스트에 저장)
+        // 편의상 30분으로 고정하거나, JwtUtil에서 남은 시간 계산 메서드 추가 가능
+        // 여기선 간단하게 30분(Access Token 수명)으로 설정
+        long expiration = 30 * 60 * 1000L;
+
+        // Redis에 저장 (Key: 토큰, Value: "logout")
+        redisTemplate.opsForValue().set(accessToken, "logout", expiration, TimeUnit.MILLISECONDS);
+
+        // Refresh Token도 삭제 (재로그인 방지)
+        String username = jwtUtil.getUsername(accessToken);
+
+        redisTemplate.delete("RT:" + username); // Refresh Token 키 규칙에 맞게 삭제
+    }
 }
