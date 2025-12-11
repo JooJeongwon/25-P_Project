@@ -35,6 +35,17 @@ public class Product extends BaseTimeEntity {
 
     private String imageUrl; // 이미지 주소
 
+    @Column(columnDefinition = "TEXT")
+    private String itemUrl; // 상품 원본 링크 (네이버 쇼핑 상세 페이지)
+
+    // 상세 분류 정보
+    private String brand;
+    private String maker;
+    private String category1;
+    private String category2;
+    private String category3;
+    private String category4;
+
     // 어르신 맞춤 정보
     private String volume; // 용량 (예: 120정)
     private String sizeInfo; // 알약 크기

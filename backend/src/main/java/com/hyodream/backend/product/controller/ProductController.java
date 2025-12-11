@@ -89,7 +89,22 @@ public class ProductController {
         return ResponseEntity.ok(productService.getRecommendedProducts(identifier, isLogin));
     }
 
-    @Operation(summary = "상품 키워드 검색", description = "키워드로 상품을 검색합니다. (네이버 쇼핑 API 연동 및 DB 캐싱)")
+    @Operation(summary = "상품 키워드 검색", description = """
+            키워드로 상품을 검색하고, 네이버 쇼핑 API 결과를 실시간으로 캐싱합니다.
+
+            **[검색 및 데이터 동기화 로직]**
+            1. **API 연동:** 네이버 쇼핑 API를 통해 **상위 20개** 상품을 실시간 조회합니다.
+            2. **알러지 필터링 (로그인 회원):** 회원의 알러지 정보와 일치하는 유해 상품은 **자동 필터링**되어 결과에서 제외되며, DB에도 저장되지 않습니다. (비회원은 필터링 없음)
+            3. **데이터 최신화 (Upsert):**
+               - **신규 상품:** DB에 새로 등록되며 판매량은 0으로 초기화됩니다.
+               - **기존 상품:** 이미 존재하는 상품(`naverProductId`)은 가격, 이미지, 판매 상태(`ON_SALE`), 상세 정보를 최신으로 업데이트합니다. (누적 판매량은 유지)
+            4. **자동 태깅:** 상품명과 카테고리를 분석하여 '알러지 성분(19종)'과 '기대 효능(7종)'을 자동으로 추출해 태깅합니다.
+
+            **[데이터 관리 정책 (Background)]**
+            - **자동 정리:** 매일 새벽 4시, **30일 이상** 검색/업데이트되지 않은 상품을 정리합니다.
+              - 판매 이력이 **있는** 상품: '판매 중지(STOP_SELLING)' 상태로 변경 (주문 내역 보존)
+              - 판매 이력이 **없는** 상품: DB에서 **영구 삭제** (용량 확보)
+            """)
     @GetMapping("/search")
     public ResponseEntity<PagedModel<ProductResponseDto>> searchProducts(
             @Parameter(description = "검색어 (예: 관절, 루테인)") @RequestParam("keyword") String keyword,

@@ -52,6 +52,13 @@ public class ProductService {
         product.setPrice(dto.getPrice());
         product.setDescription(dto.getDescription());
         product.setImageUrl(dto.getImageUrl());
+        product.setItemUrl(dto.getItemUrl()); // 상품 URL
+        product.setBrand(dto.getBrand());
+        product.setMaker(dto.getMaker());
+        product.setCategory1(dto.getCategory1());
+        product.setCategory2(dto.getCategory2());
+        product.setCategory3(dto.getCategory3());
+        product.setCategory4(dto.getCategory4());
         product.setVolume(dto.getVolume());
         product.setSizeInfo(dto.getSizeInfo());
 
@@ -220,7 +227,10 @@ public class ProductService {
                 requestDto.setHealthGoalNames(
                         user.getHealthGoals().stream().map(h -> h.getHealthGoal().getName()).toList());
 
-                List<Long> aiProductIds = aiClient.getRecommendations(requestDto);
+                // AiClient의 반환 타입 변경에 대응 (AiRecommendResponse -> productIds 추출)
+                var aiResponse = aiClient.getRecommendations(requestDto);
+                List<Long> aiProductIds = aiResponse.productIds();
+                
                 if (aiProductIds != null && !aiProductIds.isEmpty()) {
                     List<Product> aiProducts = productRepository.findAllById(aiProductIds);
                     finalProducts.addAll(aiProducts);

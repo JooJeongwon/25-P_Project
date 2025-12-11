@@ -226,9 +226,18 @@ public class NaverShoppingService {
             product.setName(name);
             product.setPrice(Integer.parseInt(item.getLprice()));
             product.setImageUrl(item.getImage());
+            product.setItemUrl(item.getLink()); // 원본 링크 저장
             product.setStatus(ProductStatus.ON_SALE); // 다시 검색되었으므로 판매 중으로 갱신
 
-            // 상세 정보 조합
+            // 상세 분류 정보 저장
+            product.setBrand(item.getBrand());
+            product.setMaker(item.getMaker());
+            product.setCategory1(item.getCategory1());
+            product.setCategory2(item.getCategory2());
+            product.setCategory3(item.getCategory3());
+            product.setCategory4(item.getCategory4());
+
+            // 상세 정보 조합 (기존 Description 유지)
             StringBuilder desc = new StringBuilder();
             if (item.getBrand() != null && !item.getBrand().isEmpty()) desc.append("Brand: ").append(item.getBrand()).append("\n");
             if (item.getMaker() != null && !item.getMaker().isEmpty()) desc.append("Maker: ").append(item.getMaker()).append("\n");

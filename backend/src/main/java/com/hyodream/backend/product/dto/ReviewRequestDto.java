@@ -14,6 +14,6 @@ public class ReviewRequestDto {
     @Schema(description = "리뷰 내용", example = "배송도 빠르고 부모님이 좋아하십니다.")
     private String content;
 
-    @Schema(description = "만족도 평가 (GOOD, AVERAGE, BAD)", example = "GOOD")
+    @Schema(description = "만족도 평가 (GOOD, BAD)", example = "GOOD")
     private ReviewRating rating;
 }

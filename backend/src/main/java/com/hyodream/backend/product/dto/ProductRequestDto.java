@@ -21,6 +21,27 @@ public class ProductRequestDto {
     @Schema(description = "상품 이미지 URL", example = "https://example.com/images/red_ginseng.jpg")
     private String imageUrl;
 
+    @Schema(description = "상품 원본 URL", example = "https://search.shopping.naver.com/...")
+    private String itemUrl;
+
+    @Schema(description = "브랜드", example = "정관장")
+    private String brand;
+
+    @Schema(description = "제조사", example = "한국인삼공사")
+    private String maker;
+
+    @Schema(description = "카테고리 1 (대분류)", example = "식품")
+    private String category1;
+
+    @Schema(description = "카테고리 2 (중분류)", example = "건강식품")
+    private String category2;
+
+    @Schema(description = "카테고리 3 (소분류)", example = "홍삼")
+    private String category3;
+
+    @Schema(description = "카테고리 4 (세분류)", example = "홍삼농축액")
+    private String category4;
+
     @Schema(description = "용량/수량", example = "10ml x 30포")
     private String volume;
 

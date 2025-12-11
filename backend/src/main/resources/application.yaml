@@ -43,3 +43,8 @@ logging:
 naver:
   client-id: Jda4sb7czd6aeWbFLKfn
   client-secret: QofE1CitRJ
+
+ai:
+  server:
+    # 기본값: Docker Compose 서비스명 (hyodream-ai)
+    url: http://hyodream-ai:8000

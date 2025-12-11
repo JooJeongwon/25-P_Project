@@ -21,8 +21,6 @@ out/
 
 # 테스트 파일 무시
 test_*
-#test_naver_api.sh
-#test_integrated_search.sh
 
 # 제미나이 CLI 파일 관련
 GEMINI.md
