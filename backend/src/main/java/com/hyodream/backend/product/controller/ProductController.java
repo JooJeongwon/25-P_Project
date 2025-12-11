@@ -60,15 +60,18 @@ public class ProductController {
         return ResponseEntity.ok(productService.getProduct(id));
     }
 
-    @Operation(summary = "개인화 맞춤 상품 추천 (하이브리드)", description = """
-            사용자의 상태에 따라 다양한 알고리즘을 결합하여 최적의 상품을 추천합니다:
-            1. [실시간] 최근 본 상품과 유사한 카테고리의 인기 상품 (비로그인 가능) - 최대 3개
-            2. [건강목표] 사용자가 설정한 기대효과(예: 눈 건강)에 부합하는 상품 - 각 목표당 2개
-            3. [지병] 같은 지병을 앓는 다른 사용자들이 많이 구매한 검증된 상품 - 각 지병당 3개
-            4. [AI] AI가 종합적인 건강 데이터를 분석하여 선별한 상품 - 최대 3개
+    @Operation(summary = "개인화 맞춤 상품 추천 (섹션별 그룹화)", description = """
+            사용자의 상태에 따라 4가지 섹션으로 그룹화된 추천 결과를 반환합니다.
+            각 섹션은 `title`(추천 사유)과 `products`(상품 목록)으로 구성됩니다.
+
+            **[응답 구조]**
+            - **realTime:** [실시간] 최근 관심사(카테고리/효능) 기반 (최대 4개)
+            - **healthGoals:** [건강목표] 사용자가 설정한 목표별 리스트 (목표당 2개)
+            - **diseases:** [지병] 같은 지병을 가진 환우들의 선택 (지병당 2개)
+            - **ai:** [AI] 종합 분석 결과 (3개 고정)
             """)
     @GetMapping("/recommend")
-    public ResponseEntity<List<ProductResponseDto>> getRecommendedProducts(
+    public ResponseEntity<com.hyodream.backend.product.dto.RecommendationResponseDto> getRecommendedProducts(
             @Parameter(description = "비로그인 유저 세션 ID") @RequestHeader(value = "X-Session-Id", required = false) String sessionId,
             Authentication auth) {
         String identifier;
@@ -82,8 +85,8 @@ public class ProductController {
             identifier = sessionId;
             isLogin = false;
         } else {
-            // 둘 다 없으면 추천해줄 근거가 없음 -> 빈 리스트 반환
-            return ResponseEntity.ok(List.of());
+            // 둘 다 없으면 빈 객체 반환
+            return ResponseEntity.ok(new com.hyodream.backend.product.dto.RecommendationResponseDto());
         }
 
         return ResponseEntity.ok(productService.getRecommendedProducts(identifier, isLogin));

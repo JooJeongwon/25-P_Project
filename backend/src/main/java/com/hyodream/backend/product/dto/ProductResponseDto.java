@@ -47,6 +47,13 @@ public class ProductResponseDto {
     @Schema(description = "포함된 알레르기 성분 (로그인 유저의 경우 필터링됨)", example = "[\"우유\", \"대두\"]")
     private List<String> allergens;
 
+    @Schema(description = "추천 사유 (추천 API에서만 값 존재)", example = "최근 보신 '피자'와 비슷한 상품이에요")
+    private String reason;
+
+    public void setReason(String reason) {
+        this.reason = reason;
+    }
+
     // 엔티티 -> DTO 변환 생성자
     public ProductResponseDto(Product product) {
         this.id = product.getId();

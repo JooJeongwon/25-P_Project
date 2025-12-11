@@ -27,6 +27,16 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findTop5ByHealthBenefitsContainingOrderByIdDesc(String benefit);
 
+    // [Real-time Rec] 효능(List) 또는 카테고리(1~4)에 키워드가 포함된 상품 검색
+    @Query("SELECT DISTINCT p FROM Product p " +
+           "LEFT JOIN p.healthBenefits hb " +
+           "WHERE hb LIKE %:keyword% " +
+           "OR p.category1 LIKE %:keyword% " +
+           "OR p.category2 LIKE %:keyword% " +
+           "OR p.category3 LIKE %:keyword% " +
+           "OR p.category4 LIKE %:keyword%")
+    List<Product> findByKeywordInBenefitsOrCategories(@Param("keyword") String keyword);
+
     boolean existsByName(String name);
 
     // 커스텀 정렬 & 필터링 쿼리
