@@ -2,16 +2,20 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Chromium과 드라이버 설치 (ARM64/AMD64 모두 지원, apt-key 불필요)
-# --no-install-recommends 옵션을 넣어 용량과 메모리 사용량을 줄임
+# Chromium과 드라이버 제거, Google Chrome Stable 설치 (AMD64 에뮬레이션 전용)
+# apt-key deprecated 해결: gpg 키링 방식 사용
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium \
-    chromium-driver \
+    wget \
+    gnupg \
+    ca-certificates \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && sh -c 'echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list' \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
-# 환경 변수 설정 (파이썬이 크롬 위치를 찾을 수 있게)
-ENV CHROME_BIN=/usr/bin/chromium
-ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
+# Google Chrome 환경변수 설정
+ENV CHROME_BIN=/usr/bin/google-chrome-stable
 
 COPY requirements.txt .
 RUN pip install --upgrade pip

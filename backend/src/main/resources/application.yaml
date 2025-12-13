@@ -3,32 +3,27 @@ spring:
     name: backend
 
   datasource:
-    # 도커 컴포즈 서비스명(mysql-db)을 주소로 사용
-    url: jdbc:mysql://hyodream-mysql:3306/hyodream_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-    # 배포 시: jdbc:mysql://mysql-db:3306/...
+    # 로컬 실행: localhost로 DB 접속
+    url: jdbc:mysql://localhost:3306/hyodream_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
-    # 핵심 설정: DB 테이블을 자동으로 생성/업데이트 함
     hibernate:
       ddl-auto: update
-    # 실행되는 SQL 쿼리를 콘솔에 보여줌 (디버깅용)
     show-sql: true
     properties:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
-        default_batch_fetch_size: 100 # N+1 문제 해결 (IN 쿼리로 한 번에 가져옴)
+        default_batch_fetch_size: 100
 
   data:
     redis:
-      host: hyodream-redis # 도커 밖(Host)을 통해서 연결
-      # 나중에 배포할 땐 'redis-cache'로 바꿔야 함
+      host: localhost # 변경됨: host.docker.internal -> localhost
       port: 6379
 
-  # 한글 깨짐 방지
   servlet:
     encoding:
       charset: UTF-8
@@ -46,5 +41,9 @@ naver:
 
 ai:
   server:
-    # 기본값: Docker Compose 서비스명 (hyodream-ai)
-    url: http://hyodream-ai:8000
+    # AI 서버 주소 변경
+    url: http://localhost:8000 # 변경됨: host.docker.internal -> localhost
+  review:
+    url: http://localhost:8001 # 변경됨: host.docker.internal -> localhost
+crawler:
+  url: http://localhost:8002 # 변경됨: host.docker.internal -> localhost

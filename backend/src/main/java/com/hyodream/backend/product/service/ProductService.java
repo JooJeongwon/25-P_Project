@@ -1,7 +1,14 @@
 package com.hyodream.backend.product.service;
 
 import com.hyodream.backend.global.client.AiClient;
+import com.hyodream.backend.global.client.crawler.CrawlerClient;
+import com.hyodream.backend.global.client.crawler.dto.CrawlerResponseDto;
+import com.hyodream.backend.global.client.review.AiReviewClient;
+import com.hyodream.backend.global.client.review.dto.ReviewAnalysisRequestDto;
+import com.hyodream.backend.global.client.review.dto.ReviewAnalysisResponseDto;
+import com.hyodream.backend.product.domain.AnalysisStatus;
 import com.hyodream.backend.product.domain.Product;
+import com.hyodream.backend.product.domain.ProductDetail;
 import com.hyodream.backend.product.domain.SearchLog;
 import com.hyodream.backend.product.dto.AiProductDetailDto;
 import com.hyodream.backend.product.dto.AiRecommendationRequestDto;
@@ -44,8 +51,8 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final SearchLogRepository searchLogRepository;
     private final NaverShoppingService naverShoppingService;
-    private final AiClient aiClient;
-    private final ReviewService reviewService; // [New] 리뷰 저장을 위해 주입
+    private final AiClient aiClient; // Recommendation
+    private final ProductSyncService productSyncService; // Async Sync Service
 
     private final UserRepository userRepository;
     private final StringRedisTemplate redisTemplate;
@@ -135,7 +142,7 @@ public class ProductService {
         return new PageImpl<>(finalDtos, pageable, productPage.getTotalElements());
     }
 
-    // [Modified] 상품 상세 조회 (TTL 체크 -> AI 크롤링 -> DB 업데이트)
+    // [Modified] 상품 상세 조회 (비동기 크롤링 적용)
     @Transactional
     public ProductResponseDto getProduct(Long id) {
         Product product = productRepository.findById(id)
@@ -143,9 +150,10 @@ public class ProductService {
 
         // Detail 엔티티 준비 (없으면 생성)
         if (product.getDetail() == null) {
-            product.setDetail(new com.hyodream.backend.product.domain.ProductDetail(product));
+            product.setDetail(new ProductDetail(product));
+            productRepository.save(product); // Detail 생성 즉시 저장
         }
-        com.hyodream.backend.product.domain.ProductDetail detailEntity = product.getDetail();
+        ProductDetail detailEntity = product.getDetail();
 
         // 1. 크롤링 갱신 체크 (마지막 갱신으로부터 3일 지났거나, 상세 정보가 아예 없는 경우)
         boolean needUpdate = false;
@@ -155,74 +163,28 @@ public class ProductService {
             needUpdate = true;
         }
 
+        // 이미 진행 중이면 중복 요청 방지
+        if (detailEntity.getStatus() == AnalysisStatus.PROGRESS) {
+            needUpdate = false;
+        }
+
         if (needUpdate && product.getItemUrl() != null && !product.getItemUrl().isEmpty()) {
+            // 2. [Async] 비동기로 데이터 갱신 요청
             try {
-                // 2. AI 서버에 크롤링 요청
-                log.info("🔍 Requesting crawling for product ID: {}", id);
-                AiProductDetailDto crawledData = aiClient.getProductDetail(new AiClient.CrawlRequest(product.getItemUrl()));
-
-                if (crawledData != null) {
-                    // 3. 상품 상세 정보 업데이트 (Detail 엔티티)
-                    detailEntity.updateCrawledData(
-                            crawledData.getOriginalPrice(),
-                            crawledData.getDiscountRate(),
-                            crawledData.getSeller(),
-                            crawledData.getReviewCount(),
-                            crawledData.getRating()
-                    );
-                    
-                    // Cascade 저장 (Product 저장 시 Detail도 저장됨)
-                    productRepository.save(product);
-
-                    // 4. 리뷰 데이터 저장
-                    List<String> reviewContents = new ArrayList<>();
-                    if (crawledData.getReviews() != null) {
-                        for (AiProductDetailDto.CrawledReviewDto r : crawledData.getReviews()) {
-                            ReviewRequestDto reviewDto = new ReviewRequestDto();
-                            reviewDto.setProductId(product.getId());
-                            reviewDto.setExternalReviewId(r.getExternalReviewId());
-                            reviewDto.setAuthorName(r.getAuthorName());
-                            reviewDto.setContent(r.getContent());
-                            reviewDto.setScore(r.getScore());
-                            reviewDto.setProductOption(r.getProductOption());
-                            reviewDto.setImages(r.getImages());
-                            
-                            reviewService.saveCrawledReview(reviewDto);
-                            
-                            // 감성 분석을 위해 내용 수집
-                            if (r.getContent() != null && !r.getContent().isBlank()) {
-                                reviewContents.add(r.getContent());
-                            }
-                        }
-                    }
-                    
-                    // 5. [New] AI 감성 분석 요청
-                    if (!reviewContents.isEmpty()) {
-                        try {
-                            log.info("🧠 Requesting sentiment analysis for {} reviews...", reviewContents.size());
-                            AiClient.AiSentimentResponse sentiment = aiClient.analyzeReviews(new AiClient.SentimentRequest(reviewContents));
-                            
-                            detailEntity.updateSentimentAnalysis(
-                                sentiment.positivePercent(),
-                                sentiment.negativePercent(),
-                                sentiment.totalReviews()
-                            );
-                            // Detail 정보 다시 저장 (감성 분석 결과 반영)
-                            productRepository.save(product);
-                            log.info("✅ Sentiment analysis updated: Positive={}%, Negative={}%", sentiment.positivePercent(), sentiment.negativePercent());
-                        } catch (Exception e) {
-                            log.error("⚠️ Sentiment analysis failed: {}", e.getMessage());
-                        }
-                    }
-
-                    log.info("✅ Crawling updated successfully for product ID: {}", id);
-                }
+                // 상태를 진행 중으로 변경하고 즉시 커밋
+                detailEntity.setStatus(AnalysisStatus.PROGRESS);
+                productRepository.save(product);
+                
+                productSyncService.updateProductDetailsAsync(product.getId());
+                log.info("🚀 Triggered async product sync for ID: {}", id);
             } catch (Exception e) {
-                log.error("⚠️ Failed to crawl product details (ID: {}): {}", id, e.getMessage());
-                // 크롤링 실패해도 기존 데이터로 반환 (서비스 장애 방지)
+                log.error("Failed to trigger async sync: {}", e.getMessage());
+                // 실패 시 상태 원복 (필요하다면)
+                detailEntity.setStatus(AnalysisStatus.FAILED);
             }
         }
 
+        // 3. 현재 DB에 있는 데이터 즉시 반환
         return new ProductResponseDto(product);
     }
 

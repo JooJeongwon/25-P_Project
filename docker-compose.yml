@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 1. 백엔드 (Java/Spring)
   # backend:
@@ -47,6 +45,7 @@ services:
 
   # 4. 크롤러 (Crawler/Chrome) - Host Port: 8002
   crawler:
+    platform: linux/amd64
     build:
       context: ./crawler
       dockerfile: Dockerfile

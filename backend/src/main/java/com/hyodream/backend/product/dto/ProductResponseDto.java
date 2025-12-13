@@ -1,5 +1,6 @@
 package com.hyodream.backend.product.dto;
 
+import com.hyodream.backend.product.domain.AnalysisStatus;
 import com.hyodream.backend.product.domain.Product;
 import com.hyodream.backend.product.domain.ProductDetail;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -18,10 +19,10 @@ public class ProductResponseDto {
     @Schema(description = "가격", example = "15900")
     private int price;
 
-    @Schema(description = "상품 이미지 URL", example = "https://shopping-phinf.pstatic.net/...")
+    @Schema(description = "상품 이미지 URL", example = "https://shopping-phinf.pstatic.net/ப்புகளை")
     private String imageUrl;
 
-    @Schema(description = "구매 링크 URL", example = "https://search.shopping.naver.com/...")
+    @Schema(description = "구매 링크 URL", example = "https://search.shopping.naver.com/ப்புகளை")
     private String itemUrl;
 
     @Schema(description = "브랜드", example = "정관장")
@@ -64,6 +65,9 @@ public class ProductResponseDto {
 
     @Schema(description = "AI 리뷰 분석 - 부정 비율 (%)", example = "14.5")
     private double negativeRatio;
+
+    @Schema(description = "상세 정보 분석 상태 (NONE: 미분석, PROGRESS: 분석중, COMPLETED: 완료, FAILED: 실패)", example = "PROGRESS")
+    private AnalysisStatus analysisStatus;
     
     // ---------------------
 
@@ -106,6 +110,9 @@ public class ProductResponseDto {
             // 감성 분석 결과 매핑
             this.positiveRatio = d.getPositiveRatio();
             this.negativeRatio = d.getNegativeRatio();
+            this.analysisStatus = d.getStatus();
+        } else {
+            this.analysisStatus = AnalysisStatus.NONE;
         }
     }
 }

@@ -54,17 +54,22 @@ public class ProductController {
         return ResponseEntity.ok(new PagedModel<>(result));
     }
 
-    @Operation(summary = "상품 상세 조회 (크롤링 & AI 감성 분석)", description = """
-            상품 ID로 상세 정보를 조회합니다. 이 API는 호출 시점에 데이터 최신성을 확인하고 필요한 경우 AI 크롤러와 감성 분석 엔진을 트리거합니다.
+    @Operation(summary = "상품 상세 조회 (비동기 크롤링 & AI 감성 분석)", description = """
+            상품 ID로 상세 정보를 조회합니다. 이 API는 **비동기 처리(Asynchronous Processing)** 방식을 사용하여 즉시 응답을 반환합니다.
 
-            **[상세 정보 갱신 로직 (On-Demand Processing)]**
-            1. **데이터 최신성 확인:** 해당 상품의 상세 정보(`ProductDetail`)가 없거나, 마지막 갱신일로부터 **3일**이 지났는지 확인합니다.
-            2. **AI 크롤러 호출:** 갱신이 필요하다면 AI 서버에 크롤링을 요청하여 최신 상세 정보(원가, 할인율)와 리뷰 데이터를 수집합니다.
-            3. **AI 리뷰 감성 분석 (New):**
-               - 수집된 리뷰 텍스트를 AI 모델에 전송하여 **긍정/부정 비율**을 분석합니다.
-               - 분석 결과(`positiveRatio`, `negativeRatio`)는 DB에 저장되며, 소비자에게 직관적인 구매 지표로 제공됩니다.
-            4. **데이터 동기화:** 크롤링된 정보와 분석 결과를 `ProductDetail` 및 `Review` 테이블에 저장합니다.
-            5. **응답 반환:** 최신화된 상세 정보와 감성 분석 결과를 포함한 `ProductResponseDto`를 반환합니다.
+            **[상세 정보 갱신 프로세스]**
+            1. **즉시 응답:** 요청 시 DB에 저장된 상품 정보를 **즉시 반환**합니다. (User Waiting Zero)
+            2. **상태 확인 (`analysisStatus`):** 응답 DTO의 `analysisStatus` 필드를 통해 현재 분석 진행 상태를 확인할 수 있습니다.
+               - `NONE`: 분석 전 (데이터 부족 가능성)
+               - `PROGRESS`: 현재 크롤링 및 AI 감성 분석 진행 중 (백그라운드)
+               - `COMPLETED`: 최신 정보 업데이트 및 분석 완료
+               - `FAILED`: 분석 실패
+            3. **비동기 트리거:** 데이터가 오래되었거나(3일 경과) 없을 경우, 백그라운드에서 자동으로 **AI 크롤러와 감성 분석** 작업이 시작되며 상태가 `PROGRESS`로 변경됩니다.
+            4. **클라이언트 가이드:** `analysisStatus`가 `PROGRESS`인 경우, 사용자에게 "최신 정보를 분석 중입니다..."와 같은 UI를 노출하고, 잠시 후(예: 3~5초) 다시 조회(Polling)하면 업데이트된 `COMPLETED` 데이터를 확인할 수 있습니다.
+
+            **[분석 항목]**
+            - **상세 정보:** 원가, 최신 할인가, 판매처 정보
+            - **리뷰 데이터:** 최신 리뷰 수집 및 AI 감성 분석(긍정/부정 비율) 결과
             """)
     @GetMapping("/{id}")
     public ResponseEntity<ProductResponseDto> getProduct(@PathVariable Long id) {
@@ -80,6 +85,11 @@ public class ProductController {
             - **healthGoals:** [건강목표] 사용자가 설정한 목표별 리스트 (목표당 2개)
             - **diseases:** [지병] 같은 지병을 가진 환우들의 선택 (지병당 2개)
             - **ai:** [AI] 종합 분석 결과 (3개 고정)
+
+            **[AI 추천 로직 업데이트 (Hybrid RAG)]**
+            - **Candidate Pool 생성:** 백엔드에서 먼저 '인기 상품(30개)' + '신규 상품(20개)' 등 약 50개의 **추천 후보군(Candidates)**을 DB에서 추출합니다.
+            - **AI 필터링 및 선정:** 추출된 후보군과 사용자 건강 정보(지병, 알러지)를 AI 엔진(GPT)에 전송합니다.
+            - **최종 반환:** AI가 후보군 내에서 사용자에게 가장 적합한 Top 5 상품을 선정하여 반환합니다. (Hallucination 방지 및 재고/판매상태 보장)
             """)
     @GetMapping("/recommend")
     public ResponseEntity<com.hyodream.backend.product.dto.RecommendationResponseDto> getRecommendedProducts(

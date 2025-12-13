@@ -27,12 +27,12 @@ __pycache__/
 *.pyc
 
 # 테스트 파일 무시
-test_*
+#test_*
 
 # 제미나이 CLI 파일 관련
 .gemini/
-GEMINI.md
-session_memory.json
+#GEMINI.md
+#session_memory.json
 
 # --- Sensitive Data ---
 .env

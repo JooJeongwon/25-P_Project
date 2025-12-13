@@ -39,9 +39,13 @@ public class ProductDetail {
     // 마지막 크롤링 시간
     private LocalDateTime lastCrawledAt;
 
+    @Enumerated(EnumType.STRING)
+    private AnalysisStatus status = AnalysisStatus.NONE;
+
     public ProductDetail(Product product) {
         this.product = product;
         this.productId = product.getId();
+        this.status = AnalysisStatus.NONE;
     }
 
     public void updateCrawledData(int originalPrice, int discountRate, String seller, long reviewCount, double averageRating) {
@@ -51,6 +55,8 @@ public class ProductDetail {
         this.reviewCount = reviewCount;
         this.averageRating = averageRating;
         this.lastCrawledAt = LocalDateTime.now();
+        // 크롤링만 성공해도 일단 완료로 처리 (감성 분석은 후속 작업)
+        // 감성 분석까지 포함한다면 ProductSyncService에서 제어하는 것이 더 좋음
     }
 
     // 감성 분석 결과 업데이트 메서드
@@ -58,5 +64,9 @@ public class ProductDetail {
         this.positiveRatio = positiveRatio;
         this.negativeRatio = negativeRatio;
         this.analyzedReviewCount = analyzedReviewCount;
+    }
+
+    public void setStatus(AnalysisStatus status) {
+        this.status = status;
     }
 }
