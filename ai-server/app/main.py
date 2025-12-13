@@ -114,7 +114,7 @@ def recommend_with_gpt(req: RecommendRequest) -> List[int]:
 # --------------------------------
 # API 엔드포인트
 # --------------------------------
-@app.post("/ai/recommend", response_model=RecommendResponse)
+@app.post("/recommend", response_model=RecommendResponse)
 def recommend(req: RecommendRequest):
 
     # 1️⃣ 후보 상품 필드 자체가 없는 경우

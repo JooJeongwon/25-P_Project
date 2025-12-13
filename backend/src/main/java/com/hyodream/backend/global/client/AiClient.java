@@ -12,8 +12,9 @@ import java.util.List;
 public interface AiClient {
 
     // 추천 시스템
-    @PostMapping("/ai/recommend")
+    @PostMapping("/recommend")
     AiRecommendResponse getRecommendations(@RequestBody AiRecommendationRequestDto request);
 
-    record AiRecommendResponse(@JsonProperty("product_ids") List<Long> productIds) {}
+    record AiRecommendResponse(@JsonProperty("product_ids") List<Long> productIds) {
+    }
 }
