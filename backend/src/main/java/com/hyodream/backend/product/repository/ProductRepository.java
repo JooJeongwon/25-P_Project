@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.util.List;
@@ -125,5 +126,22 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     // AI 추천 후보군 (신상품순 20개)
     List<Product> findTop20ByOrderByCreatedAtDesc();
+
+    // [Concurrency Control] 비관적 락(Pessimistic Lock)을 이용한 단일 조회
+    // SELECT ... FOR UPDATE 구문이 실행되어 다른 트랜잭션의 접근을 차단함 (줄 세우기)
+    @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Product p LEFT JOIN FETCH p.detail WHERE p.id = :id")
+    Optional<Product> findByIdWithLock(@Param("id") Long id);
+
+    // [Concurrency Fix] JPA를 거치지 않고 DB 레벨에서 원자적으로 동기화 상태 선점 (Upsert)
+    // 리턴값: 1 이상이면 내가 선점(Insert or Update 성공), 0이면 이미 진행 중(선점 실패)
+    @org.springframework.data.jpa.repository.Modifying
+    @Query(value = """
+        INSERT INTO product_details (product_id, status, review_count, average_rating, positive_ratio, negative_ratio, analyzed_review_count, original_price, discount_rate)
+        VALUES (:productId, 'PROGRESS', 0, 0.0, 0.0, 0.0, 0, 0, 0)
+        ON DUPLICATE KEY UPDATE
+            status = IF(status = 'PROGRESS', status, 'PROGRESS')
+    """, nativeQuery = true)
+    int startSyncNative(@Param("productId") Long productId);
 
 }

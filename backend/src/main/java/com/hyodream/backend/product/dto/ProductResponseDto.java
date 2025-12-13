@@ -84,6 +84,10 @@ public class ProductResponseDto {
         this.reason = reason;
     }
 
+    public void setAnalysisStatus(AnalysisStatus analysisStatus) {
+        this.analysisStatus = analysisStatus;
+    }
+
     public ProductResponseDto(Product product) {
         this.id = product.getId();
         this.name = product.getName();
