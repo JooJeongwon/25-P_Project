@@ -121,7 +121,7 @@ public class ProductService {
             if (topInterests != null && !topInterests.isEmpty()) {
                 String interestCategory = topInterests.iterator().next();
                 List<Product> interestProducts = productRepository
-                        .findByKeywordInBenefitsOrCategories(interestCategory);
+                        .findByKeywordInBenefitsOrCategoriesWithAllergyCheck(interestCategory, isLogin, userAllergies);
 
                 if (interestProducts.size() > 3) {
                     interestProducts = interestProducts.subList(0, 3);
@@ -182,6 +182,22 @@ public class ProductService {
     private com.hyodream.backend.product.dto.RecommendationResponseDto getRecommendedProductsInternal(String identifier, boolean isLogin) {
         com.hyodream.backend.product.dto.RecommendationResponseDto response = new com.hyodream.backend.product.dto.RecommendationResponseDto();
         Set<Long> addedIds = new HashSet<>();
+        
+        // 0. User Allergy Info Extraction
+        List<String> userAllergies = new ArrayList<>();
+        if (isLogin) {
+            try {
+                userRepository.findByUsername(identifier).ifPresent(user -> {
+                    user.getAllergies().forEach(ua -> userAllergies.add(ua.getAllergy().getName()));
+                });
+            } catch (Exception e) {
+                log.error("Failed to fetch user allergies: {}", e.getMessage());
+            }
+        }
+        if (userAllergies.isEmpty()) userAllergies.add("NONE");
+        boolean hasAllergies = !userAllergies.contains("NONE");
+        
+        log.info("🔍 Recommendation Debug - User: {}, Allergies: {}, hasAllergies: {}", identifier, userAllergies, hasAllergies);
 
         // Real-time
         try {
@@ -192,7 +208,9 @@ public class ProductService {
                 String hotCategory = topInterests.iterator().next();
                 log.info("🔥 Real-time Interest Detected for user '{}': {}", identifier, hotCategory);
                 
-                List<Product> candidates = productRepository.findByKeywordInBenefitsOrCategories(hotCategory);
+                // [Modified] Use Allergy Check
+                List<Product> candidates = productRepository.findByKeywordInBenefitsOrCategoriesWithAllergyCheck(
+                        hotCategory, isLogin && hasAllergies, userAllergies);
                 log.info("   -> Found {} candidate products for interest '{}'", candidates.size(), hotCategory);
                 
                 List<ProductResponseDto> sectionProducts = new ArrayList<>();
@@ -232,7 +250,12 @@ public class ProductService {
                 if (user.getHealthGoals() != null) {
                     for (var userGoal : user.getHealthGoals()) {
                         String goalName = userGoal.getHealthGoal().getName();
-                        List<Product> candidates = productRepository.findByHealthBenefitsContaining(goalName);
+                        log.info("🎯 Processing Health Goal: {}", goalName);
+                        // [Modified] Use Allergy Check
+                        List<Product> candidates = productRepository.findByHealthBenefitsContainingWithAllergyCheck(
+                                goalName, isLogin && hasAllergies, userAllergies);
+                        log.info("   -> Found {} candidates for goal '{}' (Allergy Filtered)", candidates.size(), goalName);
+                        
                         List<ProductResponseDto> sectionProducts = new ArrayList<>();
                         int count = 0;
                         for (Product p : candidates) {
@@ -255,7 +278,10 @@ public class ProductService {
                 if (user.getDiseases() != null) {
                     for (var userDisease : user.getDiseases()) {
                         String diseaseName = userDisease.getDisease().getName();
-                        List<Product> candidates = productRepository.findTopSellingProductsByDisease(diseaseName);
+                        // [Modified] Use Allergy Check
+                        List<Product> candidates = productRepository.findTopSellingProductsByDiseaseWithAllergyCheck(
+                                diseaseName, isLogin && hasAllergies, userAllergies);
+                        
                         List<ProductResponseDto> sectionProducts = new ArrayList<>();
                         int count = 0;
                         for (Product p : candidates) {
@@ -276,8 +302,8 @@ public class ProductService {
 
                 // AI
                 try {
-                    // 1. 후보군 생성 (인기 30 + 신규 20)
-                    List<Product> popular = productRepository.findTop30ByOrderByRecentSalesDesc();
+                    // 1. 후보군 생성 (인기 80 + 신규 20, 알레르기 필터링 없이 전달 -> AI가 판단)
+                    List<Product> popular = productRepository.findTop80ByOrderByRecentSalesDesc();
                     List<Product> newProducts = productRepository.findTop20ByOrderByCreatedAtDesc();
 
                     Set<Product> candidatePool = new HashSet<>(popular);

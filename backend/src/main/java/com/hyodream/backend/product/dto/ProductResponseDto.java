@@ -68,6 +68,12 @@ public class ProductResponseDto {
     @Schema(description = "알레르기 성분", example = "[\"우유\", \"대두\"]")
     private List<String> allergens;
 
+    @Schema(description = "누적 판매량", example = "1500")
+    private int totalSales;
+
+    @Schema(description = "최근 판매량 (30일)", example = "120")
+    private int recentSales;
+
     @Schema(description = "추천 사유", example = "최근 보신 '피자'와 비슷한 상품이에요")
     private String reason;
 
@@ -93,6 +99,8 @@ public class ProductResponseDto {
         this.category4 = product.getCategory4();
         this.healthBenefits = product.getHealthBenefits();
         this.allergens = product.getAllergens();
+        this.totalSales = product.getTotalSales();
+        this.recentSales = product.getRecentSales();
         
         this.reviewCount = product.getReviewCount();
         this.averageRating = product.getAverageRating();

@@ -33,16 +33,31 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findTop5ByHealthBenefitsContainingOrderByIdDesc(String benefit);
 
-    // [Real-time Rec] 효능(List) 또는 카테고리(1~4)에 키워드가 포함된 상품 검색
+    // [Real-time Rec] 효능(List) 또는 카테고리(1~4)에 키워드가 포함된 상품 검색 (알레르기 필터링 추가)
     @Query("SELECT DISTINCT p FROM Product p " +
            "LEFT JOIN p.healthBenefits hb " +
-           "WHERE hb LIKE %:keyword% " +
+           "WHERE (hb LIKE %:keyword% " +
            "OR p.category1 LIKE %:keyword% " +
            "OR p.category2 LIKE %:keyword% " +
            "OR p.category3 LIKE %:keyword% " +
-           "OR p.category4 LIKE %:keyword% " +
-           "ORDER BY p.totalSales DESC, p.id DESC")
-    List<Product> findByKeywordInBenefitsOrCategories(@Param("keyword") String keyword);
+           "OR p.category4 LIKE %:keyword%) " +
+           "AND (:isLogin = false OR NOT EXISTS (SELECT 1 FROM p.allergens a WHERE a IN :userAllergies)) " +
+           "ORDER BY p.recentSales DESC, p.id DESC")
+    List<Product> findByKeywordInBenefitsOrCategoriesWithAllergyCheck(
+            @Param("keyword") String keyword,
+            @Param("isLogin") boolean isLogin,
+            @Param("userAllergies") List<String> userAllergies);
+
+    // [Health Goal Rec] 특정 효능을 가진 상품 검색 (알레르기 필터링 추가)
+    @Query("SELECT DISTINCT p FROM Product p " +
+            "JOIN p.healthBenefits hb " +
+            "WHERE hb LIKE %:benefit% " +
+            "AND (:isLogin = false OR NOT EXISTS (SELECT 1 FROM p.allergens a WHERE a IN :userAllergies)) " +
+            "ORDER BY p.recentSales DESC, p.id DESC")
+    List<Product> findByHealthBenefitsContainingWithAllergyCheck(
+            @Param("benefit") String benefit,
+            @Param("isLogin") boolean isLogin,
+            @Param("userAllergies") List<String> userAllergies);
 
     boolean existsByName(String name);
 
@@ -104,7 +119,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
             """, nativeQuery = true)
     List<Product> findSimilarProductsByBenefits(@Param("targetId") Long targetId);
 
-    // [New] 특정 지병(diseaseName)을 가진 유저들이 많이 구매한 상품 TOP 3
+    // [New] 특정 지병(diseaseName)을 가진 유저들이 많이 구매한 상품 TOP 3 (알레르기 필터링 추가)
     @Query(value = """
             SELECT p.* 
             FROM products p
@@ -117,16 +132,45 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
                 JOIN diseases d ON ud.disease_id = d.id
                 WHERE d.name = :diseaseName
             )
+            AND (
+                 :isLogin = false 
+                 OR NOT EXISTS (
+                     SELECT 1 FROM product_allergens pa 
+                     WHERE pa.product_id = p.id 
+                     AND pa.allergen IN :userAllergies
+                 )
+            )
             GROUP BY p.id
             ORDER BY COUNT(oi.id) DESC
             LIMIT 3
             """, nativeQuery = true)
-    List<Product> findTopSellingProductsByDisease(@Param("diseaseName") String diseaseName);
+    List<Product> findTopSellingProductsByDiseaseWithAllergyCheck(
+            @Param("diseaseName") String diseaseName,
+            @Param("isLogin") boolean isLogin,
+            @Param("userAllergies") List<String> userAllergies);
 
-    // AI 추천 후보군 (인기순 30개)
-    List<Product> findTop30ByOrderByRecentSalesDesc();
+    // AI 추천 후보군 (인기순 30개 - 알레르기 제외)
+    @Query("SELECT p FROM Product p " +
+           "WHERE (:isLogin = false OR NOT EXISTS (SELECT 1 FROM p.allergens a WHERE a IN :userAllergies)) " +
+           "ORDER BY p.recentSales DESC " +
+           "LIMIT 30")
+    List<Product> findTop30SafeByRecentSales(
+            @Param("isLogin") boolean isLogin,
+            @Param("userAllergies") List<String> userAllergies);
 
-    // AI 추천 후보군 (신상품순 20개)
+    // AI 추천 후보군 (신상품순 20개 - 알레르기 제외)
+    @Query("SELECT p FROM Product p " +
+           "WHERE (:isLogin = false OR NOT EXISTS (SELECT 1 FROM p.allergens a WHERE a IN :userAllergies)) " +
+           "ORDER BY p.createdAt DESC " +
+           "LIMIT 20")
+    List<Product> findTop20SafeByCreatedAt(
+            @Param("isLogin") boolean isLogin,
+            @Param("userAllergies") List<String> userAllergies);
+
+    // AI 추천 후보군 (단순 인기순 80개 - 알레르기 필터링 없음)
+    List<Product> findTop80ByOrderByRecentSalesDesc();
+
+    // AI 추천 후보군 (단순 신상품순 20개 - 알레르기 필터링 없음)
     List<Product> findTop20ByOrderByCreatedAtDesc();
 
     // [Concurrency Control] 비관적 락(Pessimistic Lock)을 이용한 단일 조회
