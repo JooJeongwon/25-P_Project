@@ -41,6 +41,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/api/products/**",
+                                "/api/reviews/products/**", // 상품 리뷰 조회 (비로그인 허용)
                                 "/api/events/**", // 이벤트 수집
                                 "/api/naver/**", // 네이버 검색 API는 인증 없이 허용
                                 "/error",
