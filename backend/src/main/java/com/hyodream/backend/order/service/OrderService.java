@@ -21,6 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -37,12 +40,23 @@ public class OrderService {
     public Long order(List<OrderRequestDto> itemDtos) {
         User user = userService.getCurrentUser();
 
+        // 1. 요청된 상품 ID 수집 및 일괄 조회 (N+1 방지)
+        List<Long> productIds = itemDtos.stream()
+                .map(OrderRequestDto::getProductId)
+                .toList();
+
+        Map<Long, Product> productMap = productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, p -> p));
+
         List<OrderItem> orderItems = new ArrayList<>();
         int totalAmount = 0; // 총 결제 금액 계산용 변수
 
         for (OrderRequestDto dto : itemDtos) {
-            Product product = productRepository.findById(dto.getProductId())
-                    .orElseThrow(() -> new RuntimeException("상품 없음"));
+            Product product = productMap.get(dto.getProductId());
+            
+            if (product == null) {
+                throw new RuntimeException("상품 없음 (ID: " + dto.getProductId() + ")");
+            }
 
             OrderItem orderItem = OrderItem.createOrderItem(product.getId(), product.getPrice(), dto.getCount());
             orderItems.add(orderItem);
@@ -71,16 +85,24 @@ public class OrderService {
 
         List<Order> orders = orderRepository.findAllByUserIdOrderByOrderDateDesc(user.getId());
 
+        // 1. 모든 주문 내역에서 Product ID 수집 (N+1 방지)
+        Set<Long> productIds = orders.stream()
+                .flatMap(o -> o.getOrderItems().stream())
+                .map(OrderItem::getProductId)
+                .collect(Collectors.toSet());
+
+        // 2. 상품 정보 일괄 조회 및 Map 변환 (ID -> Name)
+        Map<Long, String> productNameMap = productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, Product::getName));
+
         List<OrderResponseDto> dtos = new ArrayList<>();
 
         for (Order order : orders) {
             List<OrderItemResponseDto> itemDtos = new ArrayList<>();
 
             for (OrderItem item : order.getOrderItems()) {
-                String productName = productRepository.findById(item.getProductId())
-                        .map(Product::getName)
-                        .orElse("판매 중지된 상품");
-
+                // Map에서 조회 (DB 쿼리 발생 X)
+                String productName = productNameMap.getOrDefault(item.getProductId(), "판매 중지된 상품");
                 itemDtos.add(new OrderItemResponseDto(item, productName));
             }
 

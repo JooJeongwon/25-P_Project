@@ -27,8 +27,8 @@ __pycache__/
 *.pyc
 
 # 테스트 파일 무시
-test_*
-check_*
+#test_*
+#check_*
 
 # 제미나이 CLI 파일 관련
 .gemini/
